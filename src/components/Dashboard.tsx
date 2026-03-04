@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { KPICard } from "./KPICard";
 import { AttendanceSession } from "./AttendanceSession";
@@ -60,8 +60,9 @@ export function Dashboard() {
     if (!id) return;
     setLoading(true);
     try {
+      // 1. Cargar datos base
       const studentsSnap = await getDocs(collection(db, "groups", id, "students"));
-      const students = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const students = studentsSnap.docs.map(d => ({ firebaseId: d.id, ...d.data() }));
 
       const classesSnap = await getDocs(query(collection(db, "groups", id, "classes"), orderBy("fecha")));
       const classes = classesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -70,40 +71,67 @@ export function Dashboard() {
       const attendance = attendanceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       const totalClasses = classes.length;
+      if (totalClasses === 0) {
+        setGroupData({
+          mean: 0,
+          stdDev: 0,
+          totalClasses: 0,
+          criticalPoint: 0,
+          atRiskCount: students.length,
+          history: [],
+          projections: [],
+          area: 0,
+          studentCount: students.length
+        });
+        return;
+      }
+
+      // 2. Calcular asistencia por estudiante usando firebaseId para evitar conflictos con el ID del Excel
       const studentAttendance: Record<string, number> = {};
-      students.forEach(s => {
-        const presentCount = attendance.filter((a: any) => a.studentId === s.id && a.valor === 1).length;
-        studentAttendance[s.id] = totalClasses === 0 ? 0 : (presentCount / totalClasses) * 100;
+      students.forEach((s: any) => {
+        const studentAttRecords = attendance.filter((a: any) => a.studentId === s.firebaseId);
+        const presentCount = studentAttRecords.filter((a: any) => a.valor === 1).length;
+        studentAttendance[s.firebaseId] = (presentCount / totalClasses) * 100;
       });
 
+      // 3. Estadísticas generales
       const attendanceValues = Object.values(studentAttendance);
       const { mean, stdDev } = calculateStats(attendanceValues);
-      const totalPresent = attendance.filter((a: any) => a.valor === 1).length;
-      const criticalPoint = findCriticalApprovalPoint(totalPresent, totalClasses * students.length);
+      
+      const totalPresentRecords = attendance.filter((a: any) => a.valor === 1).length;
+      const totalPossibleAttendances = totalClasses * students.length;
+      
+      // El punto crítico calcula cuántas clases de 100% asistencia se requieren para subir el promedio grupal al 80%
+      const studentAttendancesNeeded = findCriticalApprovalPoint(totalPresentRecords, totalPossibleAttendances);
+      const classesNeeded = Math.ceil(studentAttendancesNeeded / students.length);
+
       const atRiskCount = attendanceValues.filter(v => v < 80).length;
 
+      // 4. Historial para gráficos
       const history = classes.map((c: any, index: number) => {
         const classAttendance = attendance.filter((a: any) => a.classId === c.id);
         const presentInClass = classAttendance.filter((a: any) => a.valor === 1).length;
         const percentage = classAttendance.length === 0 ? 0 : (presentInClass / classAttendance.length) * 100;
         return { 
-          name: `C${index + 1}`, 
+          name: `Clase ${index + 1}`, 
           fecha: c.fecha,
           percentage: Number(percentage.toFixed(2)),
-          exact: percentage
+          exact: percentage,
+          x: index
         };
       });
 
+      // 5. Integración y Proyección
       const points = history.map((h, i) => ({ x: i, y: h.exact }));
-      const area = trapezoidRule(points);
+      const areaValue = trapezoidRule(points);
       
       const projections = [];
-      if (history.length > 2) {
-        for (let i = 0; i < 5; i++) {
-          const xVal = history.length + i;
+      if (history.length >= 2) {
+        for (let i = 1; i <= 3; i++) {
+          const xVal = history.length - 1 + i;
           projections.push({
-            name: `P${i + 1}`,
-            percentage: lagrangeInterpolation(points, xVal)
+            name: `Prox ${i}`,
+            percentage: Number(lagrangeInterpolation(points, xVal).toFixed(2))
           });
         }
       }
@@ -112,11 +140,11 @@ export function Dashboard() {
         mean,
         stdDev,
         totalClasses,
-        criticalPoint,
+        criticalPoint: classesNeeded,
         atRiskCount,
         history,
         projections,
-        area,
+        area: areaValue,
         studentCount: students.length
       });
     } catch (err) {
@@ -187,7 +215,7 @@ export function Dashboard() {
           </div>
         ) : (
           <div className="space-y-8">
-            {groupData && (
+            {groupData && groupData.totalClasses > 0 ? (
               <>
                 <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <KPICard 
@@ -207,7 +235,7 @@ export function Dashboard() {
                     title="Punto Crítico (80%)" 
                     value={`${groupData.criticalPoint} clases`}
                     method="Método de Bisección"
-                    subtitle="Clases extra necesarias"
+                    subtitle="Clases extra (asistencia 100%)"
                     icon={<AlertTriangle className="w-4 h-4 text-destructive" />}
                   />
                   <KPICard 
@@ -285,18 +313,17 @@ export function Dashboard() {
                   </TabsContent>
                 </Tabs>
               </>
-            )}
-            {!groupData && !loading && (
+            ) : (
               <div className="flex flex-col items-center justify-center py-20 bg-white/50 border rounded-xl border-dashed">
                 <Users className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-medium">No hay datos disponibles</h3>
-                <p className="text-muted-foreground">Seleccione un grupo o cree uno nuevo para comenzar.</p>
+                <h3 className="text-xl font-medium">No hay datos suficientes</h3>
+                <p className="text-muted-foreground">Registre la asistencia de al menos una clase para ver las estadísticas.</p>
               </div>
             )}
             {loading && (
-              <div className="flex flex-col items-center justify-center py-20">
+              <div className="fixed inset-0 bg-white/60 flex flex-col items-center justify-center z-50">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                <p className="mt-4 text-muted-foreground">Procesando cálculos estadísticos...</p>
+                <p className="mt-4 text-muted-foreground font-medium">Procesando cálculos estadísticos...</p>
               </div>
             )}
           </div>

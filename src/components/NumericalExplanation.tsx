@@ -22,7 +22,13 @@ export function NumericalExplanation({ methodName }: { methodName: string }) {
     if (explanation) return;
     setLoading(true);
     try {
-      const res = await explainNumericalMethod({ methodName });
+      // Proporcionar contexto adicional para que la IA explique mejor el Punto Crítico
+      let queryName = methodName;
+      if (methodName === "Método de Bisección") {
+        queryName = "Método de Bisección aplicado al cálculo de clases adicionales necesarias para alcanzar el 80% de asistencia";
+      }
+      
+      const res = await explainNumericalMethod({ methodName: queryName });
       setExplanation(res.explanation);
     } catch (err) {
       setExplanation("No se pudo obtener la explicación en este momento.");
