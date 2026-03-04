@@ -27,18 +27,27 @@ export function AttendanceSession({ groupId, onComplete }: { groupId: string; on
 
   useEffect(() => {
     async function loadStudents() {
+      if (!groupId) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
-      const q = query(collection(db, "groups", groupId, "students"));
-      const snapshot = await getDocs(q);
-      const list: Student[] = snapshot.docs.map(doc => ({
-        firebaseId: doc.id,
-        ...doc.data()
-      })) as Student[];
-      setStudents(list);
-      setLoading(false);
+      try {
+        const q = query(collection(db, "groups", groupId, "students"));
+        const snapshot = await getDocs(q);
+        const list: Student[] = snapshot.docs.map(doc => ({
+          firebaseId: doc.id,
+          ...doc.data()
+        })) as Student[];
+        setStudents(list);
+      } catch (err: any) {
+        toast({ variant: "destructive", title: "Error al cargar estudiantes", description: err.message });
+      } finally {
+        setLoading(false);
+      }
     }
     loadStudents();
-  }, [groupId]);
+  }, [groupId, toast]);
 
   const markStatus = (studentId: string, status: "Presente" | "Ausente") => {
     setAttendance(prev => ({ ...prev, [studentId]: status }));
@@ -47,15 +56,13 @@ export function AttendanceSession({ groupId, onComplete }: { groupId: string; on
   const isComplete = students.length > 0 && Object.keys(attendance).length === students.length;
 
   const saveAttendance = async () => {
-    if (!isComplete) return;
+    if (!isComplete || !groupId) return;
     setSaving(true);
     try {
       const fecha = new Date().toISOString().split('T')[0];
       
-      // Create Class record
       const classRef = await addDoc(collection(db, "groups", groupId, "classes"), { fecha });
 
-      // Create Attendance records in batch
       const batch = writeBatch(db);
       Object.entries(attendance).forEach(([studentId, status]) => {
         const attRef = doc(collection(db, "groups", groupId, "attendance"));
@@ -78,6 +85,7 @@ export function AttendanceSession({ groupId, onComplete }: { groupId: string; on
     }
   };
 
+  if (!groupId) return <div className="text-center p-8">Seleccione un grupo para iniciar la clase.</div>;
   if (loading) return <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (

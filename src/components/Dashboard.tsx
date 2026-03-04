@@ -51,10 +51,13 @@ export function Dashboard() {
   useEffect(() => {
     if (selectedGroupId) {
       loadGroupStatistics(selectedGroupId);
+    } else {
+      setGroupData(null);
     }
   }, [selectedGroupId]);
 
   const loadGroupStatistics = async (id: string) => {
+    if (!id) return;
     setLoading(true);
     try {
       const studentsSnap = await getDocs(collection(db, "groups", id, "students"));
@@ -66,24 +69,22 @@ export function Dashboard() {
       const attendanceSnap = await getDocs(collection(db, "groups", id, "attendance"));
       const attendance = attendanceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      // Process stats
       const totalClasses = classes.length;
       const studentAttendance: Record<string, number> = {};
       students.forEach(s => {
-        const presentCount = attendance.filter(a => a.studentId === s.id && a.valor === 1).length;
+        const presentCount = attendance.filter((a: any) => a.studentId === s.id && a.valor === 1).length;
         studentAttendance[s.id] = totalClasses === 0 ? 0 : (presentCount / totalClasses) * 100;
       });
 
       const attendanceValues = Object.values(studentAttendance);
       const { mean, stdDev } = calculateStats(attendanceValues);
-      const totalPresent = attendance.filter(a => a.valor === 1).length;
+      const totalPresent = attendance.filter((a: any) => a.valor === 1).length;
       const criticalPoint = findCriticalApprovalPoint(totalPresent, totalClasses * students.length);
       const atRiskCount = attendanceValues.filter(v => v < 80).length;
 
-      // History for charts
       const history = classes.map((c: any, index: number) => {
-        const classAttendance = attendance.filter(a => a.classId === c.id);
-        const presentInClass = classAttendance.filter(a => a.valor === 1).length;
+        const classAttendance = attendance.filter((a: any) => a.classId === c.id);
+        const presentInClass = classAttendance.filter((a: any) => a.valor === 1).length;
         const percentage = classAttendance.length === 0 ? 0 : (presentInClass / classAttendance.length) * 100;
         return { 
           name: `C${index + 1}`, 
@@ -93,7 +94,6 @@ export function Dashboard() {
         };
       });
 
-      // Numerical projections
       const points = history.map((h, i) => ({ x: i, y: h.exact }));
       const area = trapezoidRule(points);
       
@@ -119,6 +119,8 @@ export function Dashboard() {
         area,
         studentCount: students.length
       });
+    } catch (err) {
+      console.error("Error loading stats:", err);
     } finally {
       setLoading(false);
     }
@@ -167,6 +169,7 @@ export function Dashboard() {
           variant={view === "session" ? "default" : "ghost"} 
           onClick={() => setView("session")}
           className="gap-2"
+          disabled={!selectedGroupId}
         >
           <Presentation className="w-4 h-4" /> Iniciar Clase
         </Button>

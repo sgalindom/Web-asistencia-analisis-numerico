@@ -1,0 +1,70 @@
+
+{
+  "entities": {
+    "Group": {
+      "title": "Group",
+      "description": "An academic group/course.",
+      "type": "object",
+      "properties": {
+        "nombreGrupo": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nombreGrupo", "createdAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "A student enrolled in a group.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nombre": { "type": "string" },
+        "carrera": { "type": "string" },
+        "edad": { "type": "number" }
+      },
+      "required": ["id", "nombre", "carrera"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "A specific class session.",
+      "type": "object",
+      "properties": {
+        "fecha": { "type": "string", "format": "date" }
+      },
+      "required": ["fecha"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Attendance record for a student in a class.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "fecha": { "type": "string", "format": "date" },
+        "valor": { "type": "number", "enum": [0, 1] },
+        "estado": { "type": "string", "enum": ["Presente", "Ausente"] }
+      },
+      "required": ["classId", "studentId", "fecha", "valor", "estado"]
+    }
+  },
+  "auth": {
+    "providers": ["google.com"]
+  },
+  "firestore": {
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Academic groups"
+    },
+    "/groups/{groupId}/students/{studentId}": {
+      "schema": "Student",
+      "description": "Students in a group"
+    },
+    "/groups/{groupId}/classes/{classId}": {
+      "schema": "Class",
+      "description": "Classes held for a group"
+    },
+    "/groups/{groupId}/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Attendance records for a group"
+    }
+  }
+}

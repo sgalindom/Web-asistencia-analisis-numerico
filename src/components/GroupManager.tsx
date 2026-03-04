@@ -72,13 +72,11 @@ export function GroupManager({ onGroupCreated }: { onGroupCreated: () => void })
           
           const validatedStudents = validateExcel(json);
 
-          // Create Group
           const groupRef = await addDoc(collection(db, "groups"), {
             nombreGrupo: groupName,
             createdAt: new Date().toISOString(),
           });
 
-          // Create Students in Subcollection
           const batch = writeBatch(db);
           validatedStudents.forEach((student) => {
             const studentRef = doc(collection(db, "groups", groupRef.id, "students"));
