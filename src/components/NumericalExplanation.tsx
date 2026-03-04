@@ -1,9 +1,8 @@
-
 "use client";
 
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Info, Loader2, BookOpen } from "lucide-react";
+import { Info, Loader2, BookOpen, AlertCircle } from "lucide-react";
 import { explainNumericalMethod } from "@/ai/flows/explain-numerical-method-flow";
 import { 
   Dialog, 
@@ -14,7 +13,12 @@ import {
   DialogTrigger 
 } from "@/components/ui/dialog";
 
-export function NumericalExplanation({ methodName }: { methodName: string }) {
+interface NumericalExplanationProps {
+  methodName: string;
+  context?: string;
+}
+
+export function NumericalExplanation({ methodName, context }: NumericalExplanationProps) {
   const [explanation, setExplanation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,10 +26,11 @@ export function NumericalExplanation({ methodName }: { methodName: string }) {
     if (explanation) return;
     setLoading(true);
     try {
-      // Proporcionar contexto adicional para que la IA explique mejor el Punto Crítico
       let queryName = methodName;
       if (methodName === "Método de Bisección") {
         queryName = "Método de Bisección aplicado al cálculo de clases adicionales necesarias para alcanzar el 80% de asistencia";
+      } else if (methodName === "Filtro Estadístico") {
+        queryName = "Filtro Estadístico para identificar estudiantes con menos del 80% de asistencia y su riesgo de reprobación";
       }
       
       const res = await explainNumericalMethod({ methodName: queryName });
@@ -44,27 +49,42 @@ export function NumericalExplanation({ methodName }: { methodName: string }) {
           <Info className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-primary" />
-            Análisis Académico: {methodName}
+      <DialogContent className="max-w-md overflow-hidden p-0 gap-0 border-none shadow-2xl">
+        <DialogHeader className="p-6 bg-primary text-primary-foreground">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <BookOpen className="w-5 h-5" />
+            Análisis Académico
           </DialogTitle>
-          <DialogDescription>
-            Explicación pedagógica del método numérico aplicado a los datos de asistencia.
+          <DialogDescription className="text-primary-foreground/80 text-xs">
+            Fundamento matemático: {methodName}
           </DialogDescription>
         </DialogHeader>
-        <div className="mt-4 text-sm leading-relaxed space-y-4">
+        
+        <div className="p-6 bg-background">
           {loading ? (
-            <div className="flex flex-col items-center justify-center p-8 gap-2">
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p className="text-muted-foreground animate-pulse">Consultando experto en pedagogía...</p>
+              <p className="text-sm text-muted-foreground animate-pulse">Consultando base de conocimientos...</p>
             </div>
           ) : (
-            <div className="bg-muted p-4 rounded-lg border">
-              {explanation?.split('\n').map((line, i) => (
-                <p key={i} className="mb-2">{line}</p>
-              ))}
+            <div className="space-y-4">
+              {methodName === "Filtro Estadístico" && (
+                <div className="bg-destructive/10 border border-destructive/20 p-3 rounded-md flex gap-3 items-start">
+                  <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-bold text-destructive">¿Riesgo de qué?</h4>
+                    <p className="text-xs text-destructive/90 leading-tight">
+                      Riesgo de <strong>pérdida de la asignatura</strong> por incumplimiento del reglamento de asistencia (mínimo 80% requerido).
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              <div className="text-sm leading-relaxed text-foreground/90 space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                {explanation?.split('\n').map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
             </div>
           )}
         </div>
