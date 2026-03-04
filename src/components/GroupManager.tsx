@@ -114,7 +114,7 @@ export function GroupManager({ onGroupCreated }: { onGroupCreated: () => void })
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="groupName">Nombre del Grupo</ins>
+          <Label htmlFor="groupName">Nombre del Grupo</Label>
           <Input 
             id="groupName" 
             placeholder="Ej: Ingeniería de Sistemas - 2024" 
