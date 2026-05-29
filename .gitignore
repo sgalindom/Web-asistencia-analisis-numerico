@@ -43,3 +43,12 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+
+# editor / IDE / tooling local
+.vscode/
+.idea/
+.idx/
+.agents/
+.claude/
+studio.json
+.modified
