@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// Reglas para un proyecto de demostración académica.
+// Acceso abierto a /groups/** y sus subcolecciones (students, classes, attendance).
+// Para producción, restringir por auth (request.auth != null) y propiedad.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /groups/{groupId} {
+      allow read, write: if true;
+      match /{subcollection=**} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
