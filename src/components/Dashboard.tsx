@@ -11,7 +11,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { NumericalExplanation } from "./NumericalExplanation";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
-  LineChart, Line, AreaChart, Area, Cell, Legend, ReferenceLine,
+  LineChart, Line, AreaChart, Area, Cell, Legend, ReferenceLine, ReferenceDot,
 } from "recharts";
 import {
   calculateStats,
@@ -120,12 +120,49 @@ export function Dashboard() {
         }
       }
 
+      // --- Histograma de distribución (para visualizar Desv. Estándar) ---
+      const buckets = [
+        { from: 0,   to: 40,  label: "0–39%",   tone: "danger" },
+        { from: 40,  to: 60,  label: "40–59%",  tone: "danger" },
+        { from: 60,  to: 80,  label: "60–79%",  tone: "warn" },
+        { from: 80,  to: 90,  label: "80–89%",  tone: "ok" },
+        { from: 90,  to: 101, label: "90–100%", tone: "ok" },
+      ];
+      const distribution = buckets.map((b) => ({
+        range: b.label,
+        count: attendanceValues.filter((v) => v >= b.from && v < b.to).length,
+        tone: b.tone,
+      }));
+
+      // --- Curva de Bisección: f(x) = (P+x)/(T+x) − 0.8 ---
+      // x = asistencias adicionales con valor 1 hipotéticas
+      const bisectionRootX = need; // raíz exacta (asistencias necesarias)
+      const xMax = Math.max(20, Math.ceil(bisectionRootX * 2.2) || 80);
+      const stepCount = 40;
+      const stepSize = xMax / stepCount;
+      const bisectionCurve: any[] = [];
+      for (let i = 0; i <= stepCount; i++) {
+        const x = i * stepSize;
+        const fx = totalPossible + x === 0 ? 0 : (totalPresent + x) / (totalPossible + x) - 0.8;
+        bisectionCurve.push({
+          x: Number(x.toFixed(1)),
+          fx: Number(fx.toFixed(4)),
+          // marcador de raíz cuando estamos suficientemente cerca
+          root: Math.abs(x - bisectionRootX) < stepSize / 2 ? Number(fx.toFixed(4)) : null,
+        });
+      }
+
       setGroupData({
         mean, stdDev, totalClasses,
         criticalPoint: classesNeeded,
         atRiskCount, history, projections, area,
         studentCount: students.length,
         totalPresent, totalPossible,
+        distribution,
+        bisectionCurve,
+        bisectionRootX,
+        currentPct: (totalPresent / totalPossible) * 100,
+        attendanceValues,
       });
     } catch (err) {
       console.error("Error loading stats:", err);
@@ -423,6 +460,123 @@ export function Dashboard() {
                         <RTooltip formatter={(v: any) => [`${v}%`, "Asistencia"]} />
                         <Area type="monotone" dataKey="percentage" stroke="hsl(var(--accent))" strokeWidth={3} fill="url(#colorArea)" />
                       </AreaChart>
+                    </ChartCard>
+                  </section>
+
+                  {/* Distribución (Desv. Estándar) + Bisección lado a lado */}
+                  <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                    {/* DISTRIBUCIÓN — visualización de la desviación estándar */}
+                    <ChartCard
+                      title="Distribución de la Asistencia"
+                      subtitle={`Cuántos estudiantes hay en cada rango. La línea verde marca la media (${groupData.mean.toFixed(1)}%) y la banda gris es ±1σ (±${groupData.stdDev.toFixed(1)}).`}
+                      method="Análisis de Dispersión"
+                      icon={<Sigma className="h-4 w-4" />}
+                      chartHeight={320}
+                      badge={`σ = ${groupData.stdDev.toFixed(2)}`}
+                      hint={{
+                        formula: "σ = √( Σ(xᵢ − x̄)² / n )",
+                        source: `Se agrupan los ${groupData.studentCount} porcentajes individuales en 5 rangos. La media (${groupData.mean.toFixed(1)}%) y σ se calculan sobre todos los valores.`,
+                        interpretation: "Concentración cerca de la media = grupo homogéneo. Mucha barra a la izquierda = riesgo. Bandas anchas = mucha dispersión.",
+                      }}
+                    >
+                      <BarChart data={groupData.distribution} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="histOk" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={1} />
+                            <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity={0.6} />
+                          </linearGradient>
+                          <linearGradient id="histWarn" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(var(--warning))" stopOpacity={1} />
+                            <stop offset="100%" stopColor="hsl(var(--warning))" stopOpacity={0.6} />
+                          </linearGradient>
+                          <linearGradient id="histDanger" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={1} />
+                            <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0.55} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="range" tick={{ fontSize: 11 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} label={{ value: "estudiantes", angle: -90, position: "insideLeft", style: { fontSize: 11, fill: "hsl(var(--muted-foreground))" } }} />
+                        <RTooltip
+                          cursor={{ fill: "hsl(var(--muted))" }}
+                          formatter={(v: any) => [`${v} estudiante(s)`, "En este rango"]}
+                        />
+                        <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={70}>
+                          {groupData.distribution.map((d: any, i: number) => (
+                            <Cell
+                              key={i}
+                              fill={
+                                d.tone === "ok" ? "url(#histOk)" :
+                                d.tone === "warn" ? "url(#histWarn)" :
+                                "url(#histDanger)"
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ChartCard>
+
+                    {/* BISECCIÓN — convergencia de f(x) */}
+                    <ChartCard
+                      title="Método de Bisección — Convergencia"
+                      subtitle={`Curva f(x) = (P+x)/(T+x) − 0.8 con P=${groupData.totalPresent}, T=${groupData.totalPossible}. La raíz x* es la cantidad mínima de asistencias-perfectas para alcanzar el 80%.`}
+                      method="Método de Bisección"
+                      icon={<AlertTriangle className="h-4 w-4" />}
+                      chartHeight={320}
+                      badge={`x* ≈ ${groupData.bisectionRootX} → ${groupData.criticalPoint} clases`}
+                      hint={{
+                        formula: "f(x) = (P+x)/(T+x) − 0.8 = 0",
+                        source: `Se grafica la función desde x=0 hasta x=${Math.ceil(groupData.bisectionRootX * 2.2 || 80)} en 40 puntos. La bisección parte de [0, 10000] y se reduce a la mitad 30 iteraciones hasta f(x)=0.`,
+                        interpretation: "Donde la curva cruza la línea horizontal (eje x) está la raíz: la cantidad de asistencias adicionales necesarias para llegar al 80%.",
+                      }}
+                    >
+                      <LineChart data={groupData.bisectionCurve} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="fxFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(var(--warning))" stopOpacity={0.25} />
+                            <stop offset="100%" stopColor="hsl(var(--warning))" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis
+                          dataKey="x"
+                          tick={{ fontSize: 11 }}
+                          label={{ value: "x = asistencias extra (valor 1)", position: "insideBottom", offset: -2, style: { fontSize: 11, fill: "hsl(var(--muted-foreground))" } }}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(v) => v.toFixed(2)}
+                          label={{ value: "f(x)", angle: -90, position: "insideLeft", style: { fontSize: 11, fill: "hsl(var(--muted-foreground))" } }}
+                        />
+                        <RTooltip
+                          formatter={(v: any, name: string) => name === "fx" ? [Number(v).toFixed(4), "f(x)"] : null}
+                          labelFormatter={(label) => `x = ${label}`}
+                        />
+                        <ReferenceLine y={0} stroke="hsl(var(--destructive))" strokeWidth={1.5} />
+                        <ReferenceLine
+                          x={groupData.bisectionRootX}
+                          stroke="hsl(var(--accent))"
+                          strokeDasharray="4 4"
+                          label={{ value: `x* = ${groupData.bisectionRootX}`, position: "top", fill: "hsl(var(--accent))", fontSize: 11, fontWeight: 700 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="fx"
+                          stroke="hsl(var(--warning))"
+                          strokeWidth={3}
+                          dot={false}
+                          activeDot={{ r: 5 }}
+                          name="fx"
+                        />
+                        <ReferenceDot
+                          x={groupData.bisectionRootX}
+                          y={0}
+                          r={7}
+                          fill="hsl(var(--accent))"
+                          stroke="hsl(var(--card))"
+                          strokeWidth={3}
+                        />
+                      </LineChart>
                     </ChartCard>
                   </section>
 
