@@ -11,7 +11,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { NumericalExplanation } from "./NumericalExplanation";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
-  LineChart, Line, AreaChart, Area, Cell,
+  LineChart, Line, AreaChart, Area, Cell, Legend, ReferenceLine,
 } from "recharts";
 import {
   calculateStats,
@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Users, BarChart3, Presentation, Plus, TrendingUp, AlertTriangle,
-  GraduationCap, Sigma, CalendarDays, HelpCircle,
+  GraduationCap, Sigma, CalendarDays, HelpCircle, Activity, LineChart as LineIcon, AreaChart as AreaIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -98,7 +98,7 @@ export function Dashboard() {
         const present = classAtt.filter((a: any) => a.valor === 1).length;
         const percentage = classAtt.length === 0 ? 0 : (present / classAtt.length) * 100;
         return {
-          name: `C${index + 1}`,
+          name: `Clase ${index + 1}`,
           fecha: c.fecha,
           percentage: Number(percentage.toFixed(2)),
           exact: percentage,
@@ -113,7 +113,7 @@ export function Dashboard() {
         for (let i = 1; i <= 3; i++) {
           const xVal = history.length - 1 + i;
           projections.push({
-            name: `P${i}`,
+            name: `Próx ${i}`,
             percentage: Number(lagrangeInterpolation(points, xVal).toFixed(2)),
             isProjection: true,
           });
@@ -138,6 +138,18 @@ export function Dashboard() {
     if (!groupData) return 0;
     const avg = groupData.mean;
     return Math.abs(avg - Number(avg.toFixed(2)));
+  }, [groupData]);
+
+  const projectionData = useMemo(() => {
+    if (!groupData) return [];
+    return [
+      ...groupData.history.map((h: any) => ({ name: h.name, hist: h.percentage })),
+      // bridge — repetir el último real como punto de continuidad de la proyección
+      ...(groupData.history.length > 0 && groupData.projections.length > 0
+        ? [{ name: groupData.history[groupData.history.length - 1].name, proy: groupData.history[groupData.history.length - 1].percentage, hist: groupData.history[groupData.history.length - 1].percentage, _bridge: true }]
+        : []),
+      ...groupData.projections.map((p: any) => ({ name: p.name, proy: p.percentage })),
+    ];
   }, [groupData]);
 
   const selectedGroupName = groups.find((g) => g.id === selectedGroupId)?.nombreGrupo;
@@ -225,22 +237,22 @@ export function Dashboard() {
             </div>
           ) : (
             <div className="space-y-5">
-              {/* ===== Hero compacto ===== */}
-              <section className="overflow-hidden rounded-2xl gradient-primary p-4 text-white card-shadow-lg sm:p-5">
+              {/* ===== Hero compacto: una sola línea ===== */}
+              <section className="overflow-hidden rounded-2xl gradient-primary p-4 text-white card-shadow-lg sm:px-5 sm:py-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-widest text-white/70">
                         Panel del curso
                       </p>
-                      <h2 className="mt-0.5 font-headline text-xl font-extrabold leading-tight sm:text-2xl">
+                      <h2 className="mt-0.5 font-headline text-lg font-extrabold leading-tight sm:text-xl">
                         {selectedGroupName || "Sin grupo seleccionado"}
                       </h2>
                     </div>
                     {hasData && (
-                      <div className="hidden items-center gap-3 border-l border-white/30 pl-4 text-white/90 sm:flex">
+                      <div className="flex flex-wrap items-center gap-2 border-l border-white/30 pl-4 text-white/90">
                         <Pill icon={<Users className="h-3.5 w-3.5" />} label={`${groupData.studentCount} estudiantes`} />
-                        <Pill icon={<CalendarDays className="h-3.5 w-3.5" />} label={`${groupData.totalClasses} clase(s)`} />
+                        <Pill icon={<CalendarDays className="h-3.5 w-3.5" />} label={`${groupData.totalClasses} clases`} />
                         <Pill icon={<Sigma className="h-3.5 w-3.5" />} label={`${groupData.totalPresent}/${groupData.totalPossible} marcas`} />
                       </div>
                     )}
@@ -255,25 +267,23 @@ export function Dashboard() {
 
               {hasData ? (
                 <>
-                  {/* ===== KPIs con tooltips ===== */}
-                  <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                  {/* ===== KPIs (compactos) ===== */}
+                  <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <KPICard
-                      index={0}
-                      tone="primary"
+                      index={0} tone="primary"
                       title="Promedio General"
                       value={`${groupData.mean.toFixed(2)}%`}
                       method="Media Aritmética"
-                      subtitle={`Error de redondeo: ${errorSim.toFixed(5)}`}
+                      subtitle={`ε redondeo: ${errorSim.toFixed(5)}`}
                       icon={<TrendingUp className="h-5 w-5" />}
                       hint={{
                         formula: "x̄ = (Σ xᵢ) / n",
                         source: `Promedio de las asistencias individuales de los ${groupData.studentCount} estudiantes.`,
-                        interpretation: "Indicador global del compromiso del grupo. > 80% = saludable.",
+                        interpretation: "Indicador global del grupo. > 80% = saludable.",
                       }}
                     />
                     <KPICard
-                      index={1}
-                      tone="accent"
+                      index={1} tone="accent"
                       title="Desviación Estándar"
                       value={groupData.stdDev.toFixed(2)}
                       method="Análisis de Dispersión"
@@ -286,12 +296,11 @@ export function Dashboard() {
                       }}
                     />
                     <KPICard
-                      index={2}
-                      tone="warning"
-                      title="Punto Crítico (80%)"
+                      index={2} tone="warning"
+                      title="Punto Crítico"
                       value={`${groupData.criticalPoint} clase(s)`}
                       method="Método de Bisección"
-                      subtitle="Para alcanzar el umbral mínimo"
+                      subtitle="Para alcanzar el 80%"
                       icon={<AlertTriangle className="h-5 w-5" />}
                       hint={{
                         formula: "f(x) = (P+x)/(T+x) − 0.8 = 0",
@@ -300,8 +309,7 @@ export function Dashboard() {
                       }}
                     />
                     <KPICard
-                      index={3}
-                      tone="destructive"
+                      index={3} tone="destructive"
                       title="Estudiantes en Riesgo"
                       value={groupData.atRiskCount}
                       method="Filtro Estadístico"
@@ -315,86 +323,106 @@ export function Dashboard() {
                     />
                   </section>
 
-                  {/* ===== Diapositiva de gráficos: 3 en una vista ===== */}
-                  <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                    <ChartCard
-                      title="Tendencia Histórica"
-                      method="Media por sesión"
-                      hint={{
-                        formula: "% = (presentes_clase / total_clase) × 100",
-                        source: `Cada barra = una clase registrada (${groupData.totalClasses} en total). Se cuentan los 'valor=1' por clase y se divide entre los estudiantes marcados.`,
-                        interpretation: "Las barras en ámbar están bajo el umbral del 80%.",
-                      }}
-                    >
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={groupData.history} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                          <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} width={40} />
-                          <RTooltip cursor={{ fill: "hsl(var(--muted))" }} formatter={(v: any) => [`${v}%`, "Asistencia"]} />
-                          <Bar dataKey="percentage" radius={[6, 6, 0, 0]} maxBarSize={48}>
-                            {groupData.history.map((e: any, i: number) => (
-                              <Cell key={i} fill={e.percentage < 80 ? "hsl(var(--warning))" : "hsl(var(--primary))"} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </ChartCard>
+                  {/* =============================================================
+                       GRÁFICOS — PROTAGONISTAS DE LA VISTA
+                       ============================================================= */}
 
+                  {/* Tendencia histórica — GRÁFICO PRINCIPAL FULL WIDTH */}
+                  <ChartCard
+                    title="Tendencia Histórica de Asistencia"
+                    subtitle="Una barra por cada clase registrada. Las barras en ámbar están por debajo del umbral mínimo del 80%."
+                    method="Media por sesión"
+                    icon={<BarChart3 className="h-4 w-4" />}
+                    chartHeight={350}
+                    hint={{
+                      formula: "% clase = (presentes_clase / total_marcados) × 100",
+                      source: `Se recorren las ${groupData.totalClasses} clases registradas en Firestore. Por cada una se cuentan los 'valor=1' y se divide entre los estudiantes marcados.`,
+                      interpretation: "Permite detectar caídas en sesiones específicas y comparar el desempeño clase a clase.",
+                    }}
+                  >
+                    <BarChart data={groupData.history} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="barGradHigh" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={1} />
+                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.6} />
+                        </linearGradient>
+                        <linearGradient id="barGradLow" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(var(--warning))" stopOpacity={1} />
+                          <stop offset="100%" stopColor="hsl(var(--warning))" stopOpacity={0.6} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 12 }} />
+                      <ReferenceLine y={80} stroke="hsl(var(--destructive))" strokeDasharray="4 4" label={{ value: "Umbral 80%", position: "insideTopRight", fill: "hsl(var(--destructive))", fontSize: 11 }} />
+                      <RTooltip cursor={{ fill: "hsl(var(--muted))" }}
+                        formatter={(v: any) => [`${v}%`, "Asistencia"]}
+                        labelFormatter={(label: string, items: any[]) => {
+                          const it = items?.[0]?.payload;
+                          return it?.fecha ? `${label} · ${it.fecha}` : label;
+                        }}
+                      />
+                      <Bar dataKey="percentage" radius={[8, 8, 0, 0]} maxBarSize={70}>
+                        {groupData.history.map((e: any, i: number) => (
+                          <Cell key={i} fill={e.percentage < 80 ? "url(#barGradLow)" : "url(#barGradHigh)"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ChartCard>
+
+                  {/* Proyección + Área lado a lado (cada uno protagonista en su columna) */}
+                  <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                     <ChartCard
-                      title="Proyección"
+                      title="Proyección de Tendencia"
+                      subtitle="Polinomio de Lagrange ajustado al histórico, evaluado en las 3 próximas clases."
                       method="Interpolación de Lagrange"
-                      badge={groupData.projections.length > 0 ? `${groupData.projections.length} próximas` : undefined}
+                      icon={<LineIcon className="h-4 w-4" />}
+                      chartHeight={320}
                       hint={{
-                        formula: "P(x) = Σ yᵢ · Lᵢ(x)",
-                        source: `Polinomio que pasa por las ${groupData.totalClasses} clases reales, evaluado en x = n+1, n+2, n+3.`,
-                        interpretation: "Línea sólida = histórico. Punteada = proyección estimada de futuras clases.",
+                        formula: "P(x) = Σ yᵢ · Lᵢ(x),    Lᵢ(x) = ∏ (x − xⱼ)/(xᵢ − xⱼ)",
+                        source: `Polinomio interpolante por los ${groupData.totalClasses} puntos reales del histórico, evaluado en x = n+1, n+2, n+3.`,
+                        interpretation: "Línea sólida = histórico real. Punteada = estimación de las próximas 3 clases.",
                       }}
                     >
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={[...groupData.history.map((h: any) => ({ ...h, hist: h.percentage })),
-                                 ...groupData.projections.map((p: any) => ({ ...p, proy: p.percentage }))]}
-                          margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                          <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} width={40} />
-                          <RTooltip formatter={(v: any) => [`${v}%`, ""]} />
-                          <Line type="monotone" dataKey="hist" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} name="Histórico" />
-                          <Line type="monotone" dataKey="proy" stroke="hsl(var(--accent))" strokeWidth={2.5} strokeDasharray="5 4" dot={{ r: 4 }} name="Proyección" />
-                        </LineChart>
-                      </ResponsiveContainer>
-                      {groupData.projections.length === 0 && (
-                        <p className="mt-1 text-[10px] text-muted-foreground">Se necesitan ≥ 2 clases para proyectar.</p>
-                      )}
+                      <LineChart data={projectionData} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                        <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 12 }} />
+                        <ReferenceLine y={80} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
+                        <RTooltip formatter={(v: any, name: any) => [`${v}%`, name === "hist" ? "Histórico" : "Proyección"]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        <Line type="monotone" dataKey="hist" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 7 }} name="Histórico" connectNulls />
+                        <Line type="monotone" dataKey="proy" stroke="hsl(var(--accent))" strokeWidth={3} strokeDasharray="6 4" dot={{ r: 5, fill: "hsl(var(--accent))" }} activeDot={{ r: 7 }} name="Proyección" connectNulls />
+                      </LineChart>
                     </ChartCard>
 
                     <ChartCard
-                      title="Área Acumulada"
+                      title="Área Acumulada bajo la Curva"
+                      subtitle={`Integración numérica del histórico. Área total = ${groupData.area.toFixed(2)} u² (compromiso acumulado).`}
                       method="Regla del Trapecio"
+                      icon={<AreaIcon className="h-4 w-4" />}
+                      chartHeight={320}
                       badge={`${groupData.area.toFixed(1)} u²`}
                       hint={{
-                        formula: "A ≈ Σ (h/2)·(yᵢ + yᵢ₊₁)",
-                        source: `Integración numérica del historial: se suman las áreas de los trapecios formados entre clases consecutivas.`,
-                        interpretation: "Mide el compromiso acumulado del grupo en todo el periodo. Más área = mejor desempeño sostenido.",
+                        formula: "A ≈ Σ (h/2) · (yᵢ + yᵢ₊₁)",
+                        source: `Suma de las áreas de los ${groupData.history.length - 1} trapecios formados entre clases consecutivas.`,
+                        interpretation: "Métrica integral del compromiso del grupo. A mayor área, mejor desempeño sostenido durante el periodo.",
                       }}
                     >
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={groupData.history} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.7} />
-                              <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                          <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} width={40} />
-                          <RTooltip formatter={(v: any) => [`${v}%`, "Asistencia"]} />
-                          <Area type="monotone" dataKey="percentage" stroke="hsl(var(--accent))" strokeWidth={2.5} fill="url(#colorArea)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                      <AreaChart data={groupData.history} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0.05} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                        <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 12 }} />
+                        <ReferenceLine y={80} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
+                        <RTooltip formatter={(v: any) => [`${v}%`, "Asistencia"]} />
+                        <Area type="monotone" dataKey="percentage" stroke="hsl(var(--accent))" strokeWidth={3} fill="url(#colorArea)" />
+                      </AreaChart>
                     </ChartCard>
                   </section>
 
@@ -402,10 +430,10 @@ export function Dashboard() {
                   <section className="rounded-2xl border bg-card px-4 py-2.5 card-shadow">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                       <div className="flex items-center gap-1.5">
-                        <HelpCircle className="h-3.5 w-3.5 text-primary" />
-                        <span><strong className="text-foreground">Tip:</strong> pasa el cursor sobre cada tarjeta o gráfico para ver cómo se calculan los datos.</span>
+                        <Activity className="h-3.5 w-3.5 text-primary" />
+                        <span><strong className="text-foreground">Tip:</strong> pasa el cursor sobre cada KPI o gráfico para ver cómo se calculan los datos.</span>
                       </div>
-                      <span className="font-code">EduStat Analytics · Cálculos en cliente · {groupData.totalClasses} clases analizadas</span>
+                      <span className="font-code">EduStat Analytics · {groupData.totalClasses} clases · {groupData.studentCount} estudiantes · {groupData.totalPresent}/{groupData.totalPossible} marcas</span>
                     </div>
                   </section>
                 </>
@@ -459,46 +487,69 @@ function Pill({ icon, label }: { icon: React.ReactNode; label: string }) {
 
 interface ChartCardProps {
   title: string;
+  subtitle?: string;
   method: string;
   badge?: string;
+  icon?: React.ReactNode;
+  chartHeight?: number;
   hint: { formula: string; source: string; interpretation: string };
-  children: React.ReactNode;
+  children: React.ReactElement;
 }
 
-function ChartCard({ title, method, badge, hint, children }: ChartCardProps) {
+function ChartCard({
+  title, subtitle, method, badge, icon, chartHeight = 320, hint, children,
+}: ChartCardProps) {
   return (
     <Tooltip delayDuration={200}>
-      <div className="group flex h-full flex-col overflow-hidden rounded-2xl border bg-card p-3 card-shadow transition-all duration-300 hover:-translate-y-0.5 hover:card-shadow-lg sm:p-4">
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1">
-              <h3 className="truncate font-headline text-sm font-bold text-foreground sm:text-base">{title}</h3>
+      <div className="group flex flex-col overflow-hidden rounded-2xl border bg-card card-shadow transition-all duration-300 hover:-translate-y-0.5 hover:card-shadow-lg">
+        {/* Encabezado del gráfico */}
+        <div className="flex flex-wrap items-start justify-between gap-2 border-b bg-secondary/30 px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              {icon && (
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  {icon}
+                </div>
+              )}
+              <h3 className="font-headline text-base font-bold text-foreground sm:text-lg">{title}</h3>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                  className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                   aria-label={`Cómo se calcula ${title}`}
                 >
-                  <HelpCircle className="h-3.5 w-3.5" />
+                  <HelpCircle className="h-4 w-4" />
                 </button>
               </TooltipTrigger>
               <NumericalExplanation methodName={method} />
             </div>
-            <p className="truncate font-code text-[10px] uppercase text-muted-foreground">{method}</p>
+            {subtitle && <p className="mt-0.5 text-xs leading-snug text-muted-foreground sm:text-[13px]">{subtitle}</p>}
           </div>
-          {badge && (
-            <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-bold text-accent">
-              {badge}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {badge && (
+              <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-bold text-accent">
+                {badge}
+              </span>
+            )}
+            <span className="rounded-full bg-secondary px-2.5 py-0.5 font-code text-[10px] uppercase tracking-wide text-secondary-foreground">
+              {method}
             </span>
-          )}
+          </div>
         </div>
-        <div className="min-h-0 flex-1 h-[200px] sm:h-[220px] lg:h-[240px]">
-          {children}
+
+        {/* Cuerpo del gráfico (protagonista) */}
+        <div className="p-3 sm:p-4">
+          <div style={{ height: chartHeight }} className="w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              {children}
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
+
       <TooltipContent
         side="top"
-        className="max-w-[300px] space-y-2 rounded-xl border bg-popover p-3 text-popover-foreground shadow-xl"
+        className="max-w-[340px] space-y-2 rounded-xl border bg-popover p-3 text-popover-foreground shadow-xl"
       >
         <p className="text-xs font-bold uppercase tracking-wider text-primary">{method}</p>
         <div className="rounded-md bg-secondary/70 px-2 py-1.5 font-code text-[11px] text-foreground">
